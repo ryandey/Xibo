@@ -1,2 +1,4 @@
 .env
 .env.local
+__pycache__/bot.cpython-311.pyc
+__pycache__/responses.cpython-311.pyc
