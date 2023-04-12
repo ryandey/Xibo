@@ -1,0 +1,27 @@
+// database
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// generator
+generator client {
+  provider             = "prisma-client-py"
+  recursive_type_depth = 5
+}
+
+// data models
+model Warning {
+  id          Int    @id @default(autoincrement())
+  reason      String
+  issuedBy    User?  @relation(fields: [issuedBy_id], references: [id])
+  issuedBy_id String
+}
+
+model User {
+  id       String    @id @unique
+  name     String?
+  xp       Int       @default(0)
+  level    Int       @default(0)
+  warnings Warning[]
+}

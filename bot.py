@@ -1,11 +1,15 @@
 import os
+
 import discord
-import responses
 from dotenv import load_dotenv
+from prisma import Prisma
+
+import responses
 
 load_dotenv()  # Load .env file
 
 
+# Have bot send a message in the channel
 async def sendMessage(message, userMessage, isPrivate):
     try:
         # Handle the response
@@ -17,7 +21,12 @@ async def sendMessage(message, userMessage, isPrivate):
         print(e)
 
 
+# Run the bot
 def runDiscordBot():
+    # Connect to database
+    prisma = Prisma()
+    await prisma.connect()
+
     # Load environment variables
     TOKEN = os.getenv('DISCORD_TOKEN')
     CMD_PREFIX = os.getenv('DISCORD_CMD_PREFIX')
@@ -27,16 +36,27 @@ def runDiscordBot():
     intents.message_content = True
     client = discord.Client(intents=intents)  # Create client
 
-    # On ready
+    # Declare bot as connected to Discord
     @client.event
     async def on_ready():
         # Success message (terminal only)
         print(f'{client.user} has connected to Discord!')
 
-    # On message
+    # Handle creating database entry on join
+    @client.event
+    async def on_member_join(member):
+        # Create database entry for user
+        await prisma.user.create(
+            data={
+                'id': member.id,  # Set id as Discord ID
+                'name': member.name,  # Set name as Discord name (Ryan#1234)
+            }
+        )
+
+    # Handle message sent from Discord User
     @client.event
     async def on_message(message):
-        # Ignore messages from the bot
+        # Ignore messages from the bot itself
         if message.author == client.user:
             return
 
