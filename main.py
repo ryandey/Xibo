@@ -13,7 +13,6 @@ load_dotenv()  # Load .env file
 
 # Load environment variables
 TOKEN = os.getenv('DISCORD_TOKEN')
-CMD_PREFIX = os.getenv('DISCORD_CMD_PREFIX')
 NEWS_API = os.getenv('NEWS_API_KEY')
 WEATHER_API = os.getenv('WEATHER_API_KEY')
 
