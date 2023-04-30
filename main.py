@@ -1,24 +1,28 @@
 import os
 import random
-from math import ceil
-
 import discord
 import datetime
 import requests
+import matplotlib.pyplot as plt
+from math import ceil
 from discord.ext import commands
 from dotenv import load_dotenv
 from prisma import Prisma
-
-# from newsapi import newsapi_client
 
 load_dotenv()  # Load .env file
 
 # Load environment variables
 TOKEN = os.getenv('DISCORD_TOKEN')
 CMD_PREFIX = os.getenv('DISCORD_CMD_PREFIX')
+NEWS_API = os.getenv('NEWS_API_KEY')
+WEATHER_API = os.getenv('WEATHER_API_KEY')
 
-# Create intents & client
-client = commands.Bot(command_prefix="?", intents=discord.Intents.all())  # Create client
+# Global variables
+message_count = 0
+channel_message_count = {}
+
+# Create intents & bot
+bot = commands.Bot(command_prefix="?", intents=discord.Intents.all())  # Create bot
 
 
 # Create Prisma instance & connect to DB
@@ -40,57 +44,68 @@ async def createUser(username):
 
 
 # Actions for when the bot connects to Discord
-@client.event
+@bot.event
 async def on_ready():
     await connectToDB()
     # Success message (terminal only)
-    print(f'{client.user} is now online.')
+    print(f'{bot.user} is now online.')
 
 
 # Actions for when a user joins the server
-@client.event
+@bot.event
 async def on_member_join(member):
     await createUser(member)  # Create database entry for user
 
 
 # Actions for when a user sends a message
-@client.event
+@bot.event
 async def on_message(message):
+    global message_count
+    global channel_message_count
+
     # Check if message is from a bot
     if message.author.bot:
         return
 
-    # Award user 3 XP for every message sent
     await awardXp(message.author.name, 3, message.channel.id)  # (username, xp, channel_id)
 
+    # Tracking message counts and their channels
+    channel = message.channel.name
+    if channel in channel_message_count:
+        channel_message_count[channel] += 1
+    else:
+        channel_message_count[channel] = 1
+
+    message_count += 1
+
     # continue
-    await client.process_commands(message)
+    await bot.process_commands(message)
 
 
 # Commands
 
 # Clear - Clears a specified amount of messages (cmd_clear)
-@client.command()
+@bot.command()
 # @commands.has_any_role("Moderator", "Administrator", "Owner")
 async def clear(ctx, amount: int):
     await ctx.channel.purge(limit=amount + 1)  # Clear messages
 
 
 # Hello - Says hello to the user (cmd_hello)
-@client.command()
+@bot.command()
 async def hello(ctx):
     username = ctx.message.author.mention  # Mention user
     await ctx.reply(f'Hello {username}!')
 
 
 # Ping - Returns the bots latency (cmd_ping)
-@client.command()
+@bot.command()
 async def ping(ctx):
-    await ctx.reply(f'Pong! {round(client.latency * 1000)}ms')  # Round latency
+    await ctx.reply(f'Pong! {round(bot.latency * 1000)}ms')  # Round latency
 
 
 # Total users in database (cmd_totalusers)
-@client.command()
+@bot.command()
 async def totalusers(ctx):
     totalUsers = await prisma.user.count()  # Count the number of users in the database
     await ctx.reply(f'There are {totalUsers} users in the database')
@@ -102,7 +117,7 @@ async def totalusers(ctx):
 
 
 # Ban - Bans a user (cmd_ban)
-@client.command()
+@bot.command()
 @commands.has_any_role("Moderator", "Administrator", "Owner")
 async def ban(ctx, member: discord.Member, *, reason: str = ""):
     if reason == "":
@@ -111,7 +126,7 @@ async def ban(ctx, member: discord.Member, *, reason: str = ""):
 
 
 # Kick - Kicks a user (cmd_kick)
-@client.command()
+@bot.command()
 @commands.has_any_role("Moderator", "Administrator", "Owner")
 async def kick(ctx, member: discord.Member, *, reason: str = ""):
     if reason == "":
@@ -120,7 +135,7 @@ async def kick(ctx, member: discord.Member, *, reason: str = ""):
 
 
 # Mute - Mutes a user (cmd_mute)
-@client.command()
+@bot.command()
 @commands.has_any_role("Moderator", "Administrator", "Owner")
 async def mute(ctx, member: discord.Member, timeLimit):
     # Filter seconds
@@ -170,34 +185,123 @@ async def mute(ctx, member: discord.Member, timeLimit):
 
 
 # Unmute - Unmutes a user (cmd_unmute)
-@client.command()
+@bot.command()
 @commands.has_any_role("Moderator", "Administrator", "Owner")
 async def unmute(ctx, member: discord.Member):
     await member.edit(timed_out_until=None)
 
 
 # Info - Displays all the commands available to use with this bot (cmd_info)
-@client.command()
+@bot.command()
 async def info(ctx):
-    embed = discord.Embed(title="Info",
-                          description="This command displays all the commands available to use with this bot",
-                          color=0x02F0FF)
-    embed.add_field(name="!ban",
-                    value="This command bans a user",
-                    inline=False)
-    embed.add_field(name="!kick",
-                    value="This command removes a user from the server but doesnt ban them",
-                    inline=False)
-    embed.add_field(name="!mute",
-                    value="This command places the user on a time out for a set amount of time",
-                    inline=False)
-    embed.add_field(name="!unmute",
-                    value="This command removes the amount of time left on a users timout",
-                    inline=False)
-    await ctx.send(embed=embed)
+    embed = discord.Embed(
+        title="Info",
+        description="This command displays all the commands available to use with this bot",
+        color=0x02F0FF)
 
-    # delete user's message
-    await ctx.message.delete()
+    # Add fields
+    embed.add_field(
+        name="?ban",
+        value="This command bans a user",
+        inline=False)
+    embed.add_field(
+        name="?kick",
+        value="This command removes a user from the server but doesnt ban them", inline=False)
+    embed.add_field(
+        name="?mute",
+        value="This command places the user on a time out for a set amount of time",
+        inline=False)
+    embed.add_field(
+        name="?unmute",
+        value="This command removes the amount of time left on a users timout",
+        inline=False)
+    embed.add_field(
+        name="?news",
+        value="This command displays top headlines from the news API",
+        inline=False)
+    embed.add_field(
+        name="?weather",
+        value="This command displays the current weather of a location",
+        inline=False)
+    embed.add_field(
+        name="?poll",
+        value="This command starts a poll with a prompt and options to choose from",
+        inline=False)
+    embed.add_field(
+        name="?totalMessages",
+        value="This command shows the total number of messages received by the bot",
+        inline=False)
+    embed.add_field(
+        name="?channelStats",
+        value="This command shows a bar chart of the message count per channel",
+        inline=False)
+    embed.add_field(
+        name="?hello",
+        value="This command greets the user",
+        inline=False)
+    embed.add_field(
+        name="?pollResults",
+        value="This command shows the results of a poll using the poll ID",
+        inline=False)
+    embed.add_field(
+        name="?clear",
+        value="This command clears a specified amount of messages",
+        inline=False)
+    embed.add_field(
+        name="?help",
+        value="This command displays all the commands available to use with this bot",
+        inline=False)
+    embed.add_field(
+        name="?info",
+        value="This command displays all the commands available to use with this bot",
+        inline=False)
+    embed.add_field(
+        name="?ping",
+        value="This command displays the latency of the bot",
+        inline=False)
+    embed.add_field(
+        name="?totalusers",
+        value="This command displays how many users are in the database",
+        inline=False)
+    embed.add_field(
+        name="?xp",
+        value="This command displays the xp of a user",
+        inline=False)
+    embed.add_field(
+        name="?leaderboard",
+        value="This command displays the top 10 users with the most xp",
+        inline=False)
+    embed.add_field(
+        name="?rank",
+        value="This command displays the rank of a user",
+        inline=False)
+    embed.add_field(
+        name="?xp_give",
+        value="This command gives xp to a user",
+        inline=False)
+    embed.add_field(
+        name="?roll [coins] [expected winning side]",
+        value="This command rolls a dice and allows you to bet coins on the result",
+        inline=False)
+    embed.add_field(
+        name="?coinflip [coins]",
+        value="This command flips a coin and allows you to bet coins on the result",
+        inline=False)
+    embed.add_field(
+        name="?roulette [coins]",
+        value="This command spins a roulette wheel and allows you to bet coins on the result",
+        inline=False)
+    embed.add_field(
+        name="?8ball [question]",
+        value="This command answers a question with a random response",
+        inline=False)
+    embed.add_field(
+        name="?coins",
+        value="This command displays the amount of coins a user has",
+        inline=False)
+
+    # Send the embed to the channel
+    await ctx.reply(embed=embed)
 
 
 '''
@@ -206,12 +310,12 @@ async def info(ctx):
 
 
 # News - Displays the top 5 news articles from the US (cmd_news)
-@client.command()
+@bot.command()
 async def news(ctx):
     url = 'https://newsapi.org/v2/top-headlines'
     params = {
         'country': 'us',  # Specify the country for which you want news
-        'apiKey': os.getenv("API_KEY_NEWS"),
+        'apiKey': NEWS_API,
         'pageSize': 3  # Specify the number of articles you want
     }
     response = requests.get(url, params=params)
@@ -230,9 +334,6 @@ async def news(ctx):
         # Send the embed to the Discord channel
         await ctx.reply(embed=embed)
 
-    # delete user's message
-    await ctx.message.delete()
-
 
 '''
     EXPERIENCE POINTS SYSTEM
@@ -240,7 +341,7 @@ async def news(ctx):
 
 
 # XP - Displays the user's XP and level (cmd_xp)
-@client.command()
+@bot.command()
 async def xp(ctx, username=None):
     # Get user's own XP and level
     if username is None:
@@ -305,11 +406,11 @@ async def awardXp(username, xp, channel_id):
         )
 
         # Send the embed in the original channel
-        await client.get_channel(channel_id).send(embed=embed)
+        await bot.get_channel(channel_id).send(embed=embed)
 
 
 # Manually give a user xp (cmd_xp_give)
-@client.command()
+@bot.command()
 async def xp_give(ctx, username, xp):
     # Give user XP
     await awardXp(username, int(xp), ctx.message.channel.id)
@@ -332,12 +433,12 @@ async def takeCoins(username, coins, channel_id):
     # Give user coins
     await prisma.user.update(
         where={'username': username},  # Find user in database
-        data={'coins': {'decrement': coins}}  # Add coins
+        data={'coins': {'decrement': int(coins)}}  # Add coins
     )
 
 
 # Determine user's rank (cmd_rank)
-@client.command()
+@bot.command()
 async def rank(ctx, username=None):
     # Get user's own XP and level
     if username is None:
@@ -366,7 +467,7 @@ async def rank(ctx, username=None):
 
 
 # Leaderboard - Displays the top 10 users by xp earned (cmd_leaderboard)
-@client.command()
+@bot.command()
 async def leaderboard(ctx):
     # Get the top 10 users by xp
     users = await prisma.user.find_many(
@@ -405,7 +506,7 @@ async def checkCoins(username):
 
 
 # Roll - Rolls a die and returns a random number (cmd_roll), user can also bet coins on a number and win/lose coins
-@client.command()
+@bot.command()
 async def roll(ctx, bet=None, number=None):
     balance = await checkCoins(ctx.message.author.name)
 
@@ -509,7 +610,7 @@ async def roll(ctx, bet=None, number=None):
 
 
 # 8 Ball - Answers a question (cmd_8ball)
-@client.command(aliases=['8ball'])
+@bot.command(aliases=['8ball'])
 async def _8ball(ctx, *, question):
     responses = [
         'It is certain.',
@@ -542,7 +643,7 @@ async def _8ball(ctx, *, question):
 
 
 # Roulette with coin betting system (cmd_roulette)
-@client.command()
+@bot.command()
 async def roulette(ctx, bet):
     # Get user's own coins
     balance = await checkCoins(ctx.message.author.name)
@@ -597,7 +698,7 @@ async def roulette(ctx, bet):
 
 
 # Coinflip with coin betting system (cmd_coinflip)
-@client.command(aliases=['flip'])
+@bot.command(aliases=['flip'])
 async def coinflip(ctx, bet):
     balance = await checkCoins(ctx.message.author.name)
 
@@ -665,7 +766,7 @@ COINS SYSTEM
 
 
 # Coins - Displays the user's own coins (cmd_coins)
-@client.command()
+@bot.command()
 async def coins(ctx):
     user = await prisma.user.find_first(
         where={'username': ctx.message.author.name},  # Find user in database
@@ -699,7 +800,118 @@ async def awardCoins(username, coins, channel_id):
     )
 
     # Send the embed in the original channel
-    await client.get_channel(channel_id).send(embed=embed)
+    await bot.get_channel(channel_id).send(embed=embed)
 
 
-client.run(TOKEN)  # Run the bot
+"""
+JADIEL'S WORK
+"""
+
+
+# Total messages - Displays the total number of messages the bot has received (cmd_total_messages)
+@bot.command()
+async def totalMessages(ctx):
+    global message_count
+    await ctx.reply(f'The bot has received {message_count} messages.')
+
+
+# Channel stats - Displays a bar graph of the number of messages per channel (cmd_channel_stats)
+@bot.command()
+async def channelStats(ctx):
+    global channel_message_count
+
+    channels = channel_message_count.keys()
+    counts = channel_message_count.values()
+
+    plt.bar(channels, counts)
+    plt.xlabel('Channel')
+    plt.ylabel('Message Count')
+    plt.title('Channel Message Count')
+    plt.xticks(rotation=45)
+
+    plt.savefig('channel_message_count.png', bbox_inches='tight')
+    plt.clf()
+
+    with open('channel_message_count.png', 'rb') as f:
+        picture = discord.File(f)
+        await ctx.reply(file=picture)
+
+
+# Weather - Displays the current weather in a location (cmd_weather)
+@bot.command()
+async def weather(ctx, *, location: str):
+    weather_api = WEATHER_API
+
+    url = f'http://api.weatherapi.com/v1/current.json?key={weather_api}&q={location}&aqi=no'
+
+    try:
+        response = requests.get(url)
+        data = response.json()
+        if 'error' in data:
+            await ctx.reply(f'Error: {data["error"]["message"]}')
+        else:
+            # fields
+            location_name = data['location']['name']
+            temperature_F = data['current']['temp_f']
+            condition = data['current']['condition']['text']
+            icon = data['current']['condition']['icon']
+
+            # embed
+            embed = discord.Embed(title=f'Current Weather in {location_name}', color=0x3498db)
+            embed.add_field(name='Temperature (°F)', value=f'{temperature_F}°F', inline=False)
+            embed.add_field(name='Condition', value=condition, inline=False)
+            embed.set_thumbnail(url=f'https:{icon}')
+            await ctx.reply(embed=embed)
+
+    except requests.exceptions.RequestException as e:
+        await ctx.reply(f'Error: {e}')
+
+
+# Poll - Creates a poll (cmd_poll)
+@bot.command()
+async def poll(ctx, prompt, *options):
+    embed = discord.Embed(title="Question: ", description=prompt, color=0x02F0FF)
+
+    for i, option in enumerate(options):
+        embed.add_field(name=f"Option {chr(0x1f1e6 + i)}: " + option, value="", inline=False)
+
+    poll_message = await ctx.send(embed=embed)
+    for i in range(len(options)):
+        await poll_message.add_reaction(chr(0x1f1e6 + i))
+
+    embed.set_footer(text=f"Poll ID: {poll_message.id}")
+    await poll_message.edit(embed=embed)
+
+
+# Poll Results - Displays the results of a poll (cmd_poll_results)
+@bot.command()
+async def pollResults(ctx, poll_id: int):
+    poll_message = None
+
+    async for message in ctx.channel.history(limit=100):
+        if message.embeds and message.embeds[0].footer.text == f"Poll ID: {poll_id}":
+            poll_message = message
+            break
+
+    if poll_message:
+        options = [field.name.split(': ')[1] for field in poll_message.embeds[0].fields]
+        reactions = poll_message.reactions
+        total_votes = sum([reaction.count - 1 for reaction in reactions])
+        vote_counts = [reaction.count - 1 for reaction in reactions]
+
+        if total_votes > 0:
+            plt.pie(vote_counts, labels=options, autopct='%1.1f%%', startangle=90)
+            plt.axis('equal')
+            plt.title("Poll Results")
+            plt.savefig('poll_results.png')
+            plt.clf()
+
+            poll_results_file = discord.File('poll_results.png')
+            await ctx.reply(file=poll_results_file)
+        else:
+            await ctx.reply("No votes have been cast in this poll.")
+    else:
+        await ctx.reply("Poll not found. Please make sure you entered the correct Poll ID.")
+
+
+bot.run(TOKEN)  # Run the bot
