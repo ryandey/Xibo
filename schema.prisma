@@ -12,16 +12,17 @@ generator client {
 
 // data models
 model Warning {
-  id          Int    @id @default(autoincrement())
-  reason      String
-  issuedBy    User?  @relation(fields: [issuedBy_id], references: [id])
-  issuedBy_id String
+  id                Int    @id @default(autoincrement())
+  reason            String @default("No reason provided.")
+  issuedBy          User?  @relation(fields: [issuedBy_username], references: [username])
+  issuedBy_username String
 }
 
 model User {
-  id       String    @id @unique
-  name     String?
-  xp       Int       @default(0)
-  level    Int       @default(0)
-  warnings Warning[]
+  username   String    @id @unique
+  xp         Int       @default(0)
+  level      Int       @default(0)
+  coins      Int       @default(0)
+  level_rank Int       @default(0)
+  warnings   Warning[]
 }
