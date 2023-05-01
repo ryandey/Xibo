@@ -25,4 +25,10 @@ model User {
   coins      Int       @default(0)
   level_rank Int       @default(0)
   warnings   Warning[]
+  
+}
+model Channel {
+  id            BigInt   @id
+  name          String  
+  messages      Int     @default(0)
 }

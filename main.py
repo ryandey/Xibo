@@ -60,7 +60,6 @@ async def on_member_join(member):
 @bot.event
 async def on_message(message):
     global message_count
-    global channel_message_count
 
     # Check if message is from a bot
     if message.author.bot:
@@ -68,18 +67,20 @@ async def on_message(message):
 
     await awardXp(message.author.name, 3, message.channel.id)  # (username, xp, channel_id)
 
-    # Tracking message counts and their channels
-    channel = message.channel.name
-    if channel in channel_message_count:
-        channel_message_count[channel] += 1
+    # Get or create channel
+    channel = await prisma.channel.find_first(where={'id': message.channel.id})
+    if channel is None:
+        channel = await prisma.channel.create(
+            data={'id': message.channel.id, 'name': message.channel.name, 'messages': 1},
+        )
     else:
-        channel_message_count[channel] = 1
-
-    message_count += 1
+        channel = await prisma.channel.update(
+            where={'id': message.channel.id},
+            data={'messages': channel.messages + 1},
+        )
 
     # continue
     await bot.process_commands(message)
-
 
 # Commands
 
@@ -227,10 +228,6 @@ async def info(ctx):
         value="This command starts a poll with a prompt and options to choose from",
         inline=False)
     embed.add_field(
-        name="?totalMessages",
-        value="This command shows the total number of messages received by the bot",
-        inline=False)
-    embed.add_field(
         name="?channelStats",
         value="This command shows a bar chart of the message count per channel",
         inline=False)
@@ -245,10 +242,6 @@ async def info(ctx):
     embed.add_field(
         name="?clear",
         value="This command clears a specified amount of messages",
-        inline=False)
-    embed.add_field(
-        name="?help",
-        value="This command displays all the commands available to use with this bot",
         inline=False)
     embed.add_field(
         name="?info",
@@ -488,11 +481,60 @@ async def leaderboard(ctx):
     # Send the embed to the Discord channel
     await ctx.reply(embed=embed)
 
+@bot.command()
+async def topThree(ctx):
+    # Get the top 3 users by XP
+    users = await prisma.user.find_many(
+        skip=0,  # Skip the first 0 users
+        take=3,  # Take the top 3 users
+        order={'xp': 'desc'}  # Order the users by XP in descending order
+    )
 
+    usernames = [user.username for user in users]
+    xp_values = [user.xp for user in users]
+
+    # Code to make the graph
+    plt.bar(usernames, xp_values, color="blue")
+    plt.xlabel('Players')
+    plt.ylabel('XP')
+    plt.title('Top Three Players by XP')
+    plt.savefig('top_three.png')
+    plt.close()
+
+    # Send the image to the Discord channel
+    with open('top_three.png', 'rb') as f:
+        file = discord.File(f)
+        await ctx.send(file=file)
 """
     GAMES COMMANDS
 """
+@bot.command()
+async def rps(ctx, user_move):
+    #create a list of moves
+    moves = ['rock', 'paper', 'scissors']
 
+    #check for a valid move
+    if user_move not in moves:
+        await ctx.send('thats not a move, next time pick rock, paper or scissors')
+        return
+
+    #bot picks a move at random from the list
+    bot_move = random.choice(moves)
+
+    #If else statements that will check win conditions for user and award coins if they do
+    if user_move == bot_move:
+        await ctx.send(f"I choose {bot_move}, It's a tie!")
+    elif (user_move == 'rock' and bot_move == 'scissors'):
+        await ctx.send(f"I choose {bot_move}, You win 5 coins!")
+        await addCoins(ctx.message.author.name, 5, ctx.message.channel.id)
+    elif (user_move == 'paper' and bot_move == 'rock'):
+        await ctx.send(f"I choose {bot_move}, You win 5 coins!")
+        await addCoins(ctx.message.author.name, 5, ctx.message.channel.id)
+    elif (user_move == 'scissors' and bot_move == 'paper'):
+        await ctx.send(f"I choose {bot_move}, You win 5 coins!")
+        await addCoins(ctx.message.author.name, 5, ctx.message.channel.id)
+    else:
+        await ctx.send(f"I choose {bot_move}, I win!")
 
 # Check if the user has enough coins to bet
 async def checkCoins(username):
@@ -806,31 +848,24 @@ async def awardCoins(username, coins, channel_id):
 JADIEL'S WORK
 """
 
-
-# Total messages - Displays the total number of messages the bot has received (cmd_total_messages)
-@bot.command()
-async def totalMessages(ctx):
-    global message_count
-    await ctx.reply(f'The bot has received {message_count} messages.')
-
-
 # Channel stats - Displays a bar graph of the number of messages per channel (cmd_channel_stats)
 @bot.command()
 async def channelStats(ctx):
-    global channel_message_count
+    # Fetch channel message counts from database
+    prisma_channels = await prisma.channel.find_many()
+    channels = [channel.name for channel in prisma_channels]
+    counts = [channel.messages for channel in prisma_channels]
 
-    channels = channel_message_count.keys()
-    counts = channel_message_count.values()
-
-    plt.bar(channels, counts)
+    # Plot bar chart
+    plt.bar(channels, counts, color="blue")
     plt.xlabel('Channel')
     plt.ylabel('Message Count')
-    plt.title('Channel Message Count')
+    plt.title('Most Popular Channels')
     plt.xticks(rotation=45)
 
+    # Save plot to file and send to Discord
     plt.savefig('channel_message_count.png', bbox_inches='tight')
     plt.clf()
-
     with open('channel_message_count.png', 'rb') as f:
         picture = discord.File(f)
         await ctx.reply(file=picture)
@@ -887,17 +922,22 @@ async def poll(ctx, prompt, *options):
 async def pollResults(ctx, poll_id: int):
     poll_message = None
 
+    #limit for the message to reduce load on the bot and reduce time taken to execute
     async for message in ctx.channel.history(limit=100):
         if message.embeds and message.embeds[0].footer.text == f"Poll ID: {poll_id}":
             poll_message = message
             break
 
     if poll_message:
+        #split the option line but using a colon to setparate the field
         options = [field.name.split(': ')[1] for field in poll_message.embeds[0].fields]
         reactions = poll_message.reactions
+        #the bot has to add one reaction to each option so we subtract one to get the total
+        #total votes is counted int order to see if there are any votes in the poll
         total_votes = sum([reaction.count - 1 for reaction in reactions])
         vote_counts = [reaction.count - 1 for reaction in reactions]
-
+        
+        #make a graph if there are reactions in the poll
         if total_votes > 0:
             plt.pie(vote_counts, labels=options, autopct='%1.1f%%', startangle=90)
             plt.axis('equal')
@@ -910,7 +950,7 @@ async def pollResults(ctx, poll_id: int):
         else:
             await ctx.reply("No votes have been cast in this poll.")
     else:
-        await ctx.reply("Poll not found. Please make sure you entered the correct Poll ID.")
+        await ctx.reply("Cant find that poll, check that the poll ID")
 
 
 bot.run(TOKEN)  # Run the bot
