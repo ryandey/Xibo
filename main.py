@@ -127,7 +127,7 @@ async def ban(ctx, member: discord.Member, *, reason: str = ""):
 
 # Kick - Kicks a user (cmd_kick)
 @bot.command()
-@commands.has_any_role("Moderator", "Administrator", "Owner")
+#@commands.has_any_role("Moderator", "Administrator", "Owner")
 async def kick(ctx, member: discord.Member, *, reason: str = ""):
     if reason == "":
         reason = "This user was kicked by " + ctx.message.author.name
@@ -136,7 +136,7 @@ async def kick(ctx, member: discord.Member, *, reason: str = ""):
 
 # Mute - Mutes a user (cmd_mute)
 @bot.command()
-@commands.has_any_role("Moderator", "Administrator", "Owner")
+# @commands.has_any_role("Moderator", "Administrator", "Owner")
 async def mute(ctx, member: discord.Member, timeLimit):
     # Filter seconds
     if "s" in timeLimit:
@@ -186,7 +186,7 @@ async def mute(ctx, member: discord.Member, timeLimit):
 
 # Unmute - Unmutes a user (cmd_unmute)
 @bot.command()
-@commands.has_any_role("Moderator", "Administrator", "Owner")
+#@commands.has_any_role("Moderator", "Administrator", "Owner")
 async def unmute(ctx, member: discord.Member):
     await member.edit(timed_out_until=None)
 
@@ -301,14 +301,14 @@ async def info(ctx):
 '''
 
 
-# News - Displays the top 5 news articles from the US (cmd_news)
+# News - Displays the top three current articles from their api
 @bot.command()
 async def news(ctx):
     url = 'https://newsapi.org/v2/top-headlines'
     params = {
-        'country': 'us',  # Specify the country for which you want news
+        'country': 'us',  # Country for the news
         'apiKey': NEWS_API,
-        'pageSize': 3  # Specify the number of articles you want
+        'pageSize': 3  # The number of results displayed
     }
     response = requests.get(url, params=params)
     data = response.json()
@@ -849,7 +849,7 @@ JADIEL'S WORK
 """
 
 # Channel stats - Displays a bar graph of the number of messages per channel (cmd_channel_stats)
-@bot.command()
+@bot.command(aliases=['channelstats'])
 async def channelStats(ctx):
     # Fetch channel message counts from database
     prisma_channels = await prisma.channel.find_many()
@@ -868,7 +868,7 @@ async def channelStats(ctx):
     plt.clf()
     with open('channel_message_count.png', 'rb') as f:
         picture = discord.File(f)
-        await ctx.reply(file=picture)
+        await ctx.send(file=picture)
 
 
 # Weather - Displays the current weather in a location (cmd_weather)
@@ -884,13 +884,13 @@ async def weather(ctx, *, location: str):
         if 'error' in data:
             await ctx.reply(f'Error: {data["error"]["message"]}')
         else:
-            # fields
+            # Where we fill desired info from json into our vairables.
             location_name = data['location']['name']
             temperature_F = data['current']['temp_f']
             condition = data['current']['condition']['text']
             icon = data['current']['condition']['icon']
 
-            # embed
+            # Set Up the the data pulled from api into an array
             embed = discord.Embed(title=f'Current Weather in {location_name}', color=0x3498db)
             embed.add_field(name='Temperature (°F)', value=f'{temperature_F}°F', inline=False)
             embed.add_field(name='Condition', value=condition, inline=False)
@@ -942,13 +942,13 @@ async def pollResults(ctx, poll_id: int):
             plt.pie(vote_counts, labels=options, autopct='%1.1f%%', startangle=90)
             plt.axis('equal')
             plt.title("Poll Results")
-            plt.savefig('poll_results.png')
+            plt.savefig('poll_chart.png')
             plt.clf()
-
-            poll_results_file = discord.File('poll_results.png')
-            await ctx.reply(file=poll_results_file)
+            
+            poll_chart = discord.File('poll_chart.png')
+            await ctx.reply(file=poll_chart)
         else:
-            await ctx.reply("No votes have been cast in this poll.")
+            await ctx.reply("There are 0 vots in this poll, tray again after people vote!")
     else:
         await ctx.reply("Cant find that poll, check that the poll ID")
 
