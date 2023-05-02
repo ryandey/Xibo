@@ -82,6 +82,7 @@ async def on_message(message):
     # continue
     await bot.process_commands(message)
 
+
 # Commands
 
 # Clear - Clears a specified amount of messages (cmd_clear)
@@ -481,6 +482,7 @@ async def leaderboard(ctx):
     # Send the embed to the Discord channel
     await ctx.reply(embed=embed)
 
+
 @bot.command()
 async def topThree(ctx):
     # Get the top 3 users by XP
@@ -505,23 +507,27 @@ async def topThree(ctx):
     with open('top_three.png', 'rb') as f:
         file = discord.File(f)
         await ctx.send(file=file)
+
+
 """
     GAMES COMMANDS
 """
+
+
 @bot.command()
 async def rps(ctx, user_move):
-    #create a list of moves
+    # create a list of moves
     moves = ['rock', 'paper', 'scissors']
 
-    #check for a valid move
+    # check for a valid move
     if user_move not in moves:
         await ctx.send('thats not a move, next time pick rock, paper or scissors')
         return
 
-    #bot picks a move at random from the list
+    # bot picks a move at random from the list
     bot_move = random.choice(moves)
 
-    #If else statements that will check win conditions for user and award coins if they do
+    # If else statements that will check win conditions for user and award coins if they do
     if user_move == bot_move:
         await ctx.send(f"I choose {bot_move}, It's a tie!")
     elif (user_move == 'rock' and bot_move == 'scissors'):
@@ -535,6 +541,7 @@ async def rps(ctx, user_move):
         await addCoins(ctx.message.author.name, 5, ctx.message.channel.id)
     else:
         await ctx.send(f"I choose {bot_move}, I win!")
+
 
 # Check if the user has enough coins to bet
 async def checkCoins(username):
@@ -845,8 +852,9 @@ async def awardCoins(username, coins, channel_id):
 
 
 """
-JADIEL'S WORK
+STATS AND GRAPHS
 """
+
 
 # Channel stats - Displays a bar graph of the number of messages per channel (cmd_channel_stats)
 @bot.command(aliases=['channelstats'])
@@ -922,22 +930,22 @@ async def poll(ctx, prompt, *options):
 async def pollResults(ctx, poll_id: int):
     poll_message = None
 
-    #limit for the message to reduce load on the bot and reduce time taken to execute
+    # limit for the message to reduce load on the bot and reduce time taken to execute
     async for message in ctx.channel.history(limit=100):
         if message.embeds and message.embeds[0].footer.text == f"Poll ID: {poll_id}":
             poll_message = message
             break
 
     if poll_message:
-        #split the option line but using a colon to setparate the field
+        # split the option line but using a colon to setparate the field
         options = [field.name.split(': ')[1] for field in poll_message.embeds[0].fields]
         reactions = poll_message.reactions
-        #the bot has to add one reaction to each option so we subtract one to get the total
-        #total votes is counted int order to see if there are any votes in the poll
+        # the bot has to add one reaction to each option so we subtract one to get the total
+        # total votes is counted int order to see if there are any votes in the poll
         total_votes = sum([reaction.count - 1 for reaction in reactions])
         vote_counts = [reaction.count - 1 for reaction in reactions]
-        
-        #make a graph if there are reactions in the poll
+
+        # make a graph if there are reactions in the poll
         if total_votes > 0:
             plt.pie(vote_counts, labels=options, autopct='%1.1f%%', startangle=90)
             plt.axis('equal')
